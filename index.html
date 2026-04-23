@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transformer 可视化 · 矩阵变换全过程</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='2' fill='%237c6ef7'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' fill='%23ffffff' font-family='monospace' font-size='38' font-weight='700'%3ET%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <div class="logo">T</div>
+      <div>
+        <h1>TRANSFORMER VIZ</h1>
+        <p class="subtitle">矩阵变换 · 注意力机制 · 训练与推理</p>
+      </div>
+    </div>
+    <div class="header-status">
+      <span class="status-dot"></span>
+      BROWSER COMPUTE
+    </div>
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="architecture" data-n="01">架构总览</button>
+      <button class="tab" data-tab="components" data-n="02">矩阵变换</button>
+      <button class="tab" data-tab="training" data-n="03">训练过程</button>
+      <button class="tab" data-tab="inference" data-n="04">推理过程</button>
+    </nav>
+  </header>
+
+  <main class="app-main">
+    <!-- ============ 架构总览 ============ -->
+    <section class="view active" id="view-architecture">
+      <div class="view-header">
+        <span class="view-num">01</span>
+        <h2>完整 Transformer 架构</h2>
+        <p>经典的 Encoder-Decoder 结构（Vaswani et al., 2017）。点击任意模块查看其内部矩阵运算。</p>
+      </div>
+      <div class="arch-layout">
+        <div class="arch-side">
+          <div class="arch-title">Encoder (N×)</div>
+          <div class="arch-block clickable" data-jump="embedding">
+            <div class="block-name">输入 Embedding</div>
+            <div class="block-shape">[src_len × d_model]</div>
+          </div>
+          <div class="arch-arrow">↓ +</div>
+          <div class="arch-block clickable" data-jump="posenc">
+            <div class="block-name">位置编码 PE</div>
+            <div class="block-shape">[src_len × d_model]</div>
+          </div>
+          <div class="arch-arrow">↓</div>
+          <div class="arch-stack">
+            <div class="stack-label">× N 层</div>
+            <div class="arch-block attn clickable" data-jump="attention">
+              <div class="block-name">Multi-Head<br/>Self-Attention</div>
+            </div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-block norm clickable" data-jump="addnorm">
+              <div class="block-name">Add &amp; LayerNorm</div>
+            </div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-block ffn clickable" data-jump="ffn">
+              <div class="block-name">Feed Forward</div>
+              <div class="block-shape">d_model → d_ff → d_model</div>
+            </div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-block norm clickable" data-jump="addnorm">
+              <div class="block-name">Add &amp; LayerNorm</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="arch-bridge">
+          <div class="bridge-label">K, V</div>
+          <div class="bridge-arrow">→</div>
+        </div>
+
+        <div class="arch-side">
+          <div class="arch-title">Decoder (N×)</div>
+          <div class="arch-block clickable" data-jump="embedding">
+            <div class="block-name">输出 Embedding</div>
+            <div class="block-shape">[tgt_len × d_model]</div>
+          </div>
+          <div class="arch-arrow">↓ +</div>
+          <div class="arch-block clickable" data-jump="posenc">
+            <div class="block-name">位置编码 PE</div>
+          </div>
+          <div class="arch-arrow">↓</div>
+          <div class="arch-stack">
+            <div class="stack-label">× N 层</div>
+            <div class="arch-block attn masked clickable" data-jump="masked">
+              <div class="block-name">Masked Multi-Head<br/>Self-Attention</div>
+            </div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-block norm">Add &amp; LayerNorm</div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-block attn cross clickable" data-jump="cross">
+              <div class="block-name">Cross-Attention<br/>(Q 来自 decoder, K/V 来自 encoder)</div>
+            </div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-block norm">Add &amp; LayerNorm</div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-block ffn clickable" data-jump="ffn">
+              <div class="block-name">Feed Forward</div>
+            </div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-block norm">Add &amp; LayerNorm</div>
+          </div>
+          <div class="arch-arrow">↓</div>
+          <div class="arch-block output clickable" data-jump="output">
+            <div class="block-name">Linear + Softmax</div>
+            <div class="block-shape">d_model → vocab_size</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="arch-legend">
+        <div><span class="dot attn"></span> 注意力层</div>
+        <div><span class="dot ffn"></span> 前馈网络</div>
+        <div><span class="dot norm"></span> 残差 &amp; 归一化</div>
+        <div><span class="dot output"></span> 输出层</div>
+      </div>
+
+      <div class="arch-config">
+        <h3>当前演示配置</h3>
+        <div class="config-grid" id="config-display"></div>
+      </div>
+    </section>
+
+    <!-- ============ 矩阵变换 ============ -->
+    <section class="view" id="view-components">
+      <div class="view-header">
+        <span class="view-num">02</span>
+        <h2>每一步矩阵变换</h2>
+        <p>使用小型模型（d_model=8, 2 头注意力）逐步展示 Transformer 内部的矩阵运算。</p>
+      </div>
+
+      <div class="control-row" style="margin-bottom:14px">
+        <label>演示样本:</label>
+        <select id="comp-sample">
+          <option value="0">我 爱 你 → I love you</option>
+          <option value="1">你 好 → hello</option>
+          <option value="2">我 是 学生 → I am student</option>
+        </select>
+        <span style="color:#6f7cac;font-size:12px;margin-left:8px">切换后当前步骤数值自动刷新</span>
+      </div>
+
+      <div class="step-nav" id="step-nav"></div>
+      <div class="step-container" id="step-container"></div>
+
+      <div class="step-controls">
+        <button id="step-prev" class="btn">← 上一步</button>
+        <span class="step-indicator" id="step-indicator">1 / 1</span>
+        <button id="step-next" class="btn primary">下一步 →</button>
+      </div>
+    </section>
+
+    <!-- ============ 训练过程 ============ -->
+    <section class="view" id="view-training">
+      <div class="view-header">
+        <span class="view-num">03</span>
+        <h2>训练过程</h2>
+        <p>展示一次完整的训练迭代：前向传播 → 计算交叉熵损失 → 反向传播 → 参数更新。</p>
+      </div>
+
+      <div class="train-controls">
+        <div class="control-row">
+          <label>训练样本 (中文 → 英文):</label>
+          <select id="train-sample">
+            <option value="0">我 爱 你 → &lt;bos&gt; I love you</option>
+            <option value="1">你 好 → &lt;bos&gt; hello</option>
+            <option value="2">我 是 学生 → &lt;bos&gt; I am student</option>
+          </select>
+        </div>
+        <div class="control-row">
+          <label>学习率 η:</label>
+          <input type="range" id="train-lr" min="0.001" max="0.3" step="0.001" value="0.05" style="width:120px">
+          <span id="train-lr-val" style="font-family:ui-monospace,monospace;min-width:40px">0.050</span>
+          <label style="margin-left:12px">步数:</label>
+          <input type="number" id="train-steps" value="20" min="1" max="200" style="width:60px;background:var(--bg-3);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px">
+        </div>
+        <div class="control-row">
+          <button id="train-step" class="btn primary">执行一步训练</button>
+          <button id="train-run" class="btn">连续训练 <span id="train-run-label"></span></button>
+          <button id="train-reset" class="btn ghost">重置参数</button>
+          <span class="train-stats" id="train-stats">Step: 0 · Loss: —</span>
+        </div>
+      </div>
+
+      <div class="train-grid">
+        <div class="train-panel">
+          <h3>① 前向传播</h3>
+          <div class="flow-diagram" id="train-forward"></div>
+        </div>
+        <div class="train-panel">
+          <h3>② 损失计算 (Cross-Entropy)</h3>
+          <div id="train-loss"></div>
+        </div>
+        <div class="train-panel">
+          <h3>③ 反向传播 (梯度流)</h3>
+          <div class="flow-diagram reversed" id="train-backward"></div>
+        </div>
+        <div class="train-panel">
+          <h3>④ 参数更新 (SGD)</h3>
+          <div id="train-update"></div>
+        </div>
+      </div>
+
+      <div class="train-panel full">
+        <h3>Loss 曲线</h3>
+        <canvas id="loss-chart" width="900" height="220"></canvas>
+      </div>
+
+      <div class="train-panel full">
+        <h3>梯度范数历史</h3>
+        <canvas id="grad-chart" width="900" height="160"></canvas>
+      </div>
+    </section>
+
+    <!-- ============ 推理过程 ============ -->
+    <section class="view" id="view-inference">
+      <div class="view-header">
+        <span class="view-num">04</span>
+        <h2>推理过程 — 自回归生成</h2>
+        <p>训练完成后，Decoder 每次生成一个 token，并把已生成的部分重新输入，直到遇到 &lt;eos&gt;。</p>
+      </div>
+
+      <div class="inf-controls">
+        <div class="control-row">
+          <label>输入源句子:</label>
+          <select id="inf-source">
+            <option value="0">我 爱 你</option>
+            <option value="1">你 好</option>
+            <option value="2">我 是 学生</option>
+          </select>
+          <label style="margin-left:12px">Temperature:</label>
+          <input type="range" id="inf-temperature" min="0.1" max="2.0" step="0.05" value="1.0" style="width:100px">
+          <span id="inf-temp-val" style="font-family:ui-monospace,monospace;min-width:34px">1.00</span>
+          <label style="margin-left:12px">解码:</label>
+          <select id="inf-mode">
+            <option value="greedy">贪心 (argmax)</option>
+            <option value="sample">随机采样</option>
+          </select>
+        </div>
+        <div class="control-row" style="margin-top:8px">
+          <button id="inf-step" class="btn primary">生成下一个 token</button>
+          <button id="inf-auto" class="btn">自动生成全部</button>
+          <button id="inf-reset" class="btn ghost">重新开始</button>
+        </div>
+      </div>
+
+      <div class="inf-stage">
+        <div class="inf-panel">
+          <h3>Encoder 输出 (只计算一次)</h3>
+          <div id="inf-encoder"></div>
+        </div>
+
+        <div class="inf-panel">
+          <h3>生成过程</h3>
+          <div class="inf-tokens" id="inf-tokens"></div>
+          <div class="inf-step-detail" id="inf-step-detail"></div>
+        </div>
+
+        <div class="inf-panel">
+          <h3>KV Cache</h3>
+          <p class="hint">推理时把历史 K/V 缓存起来，避免每一步都重新计算整条已生成序列的注意力。</p>
+          <div id="inf-kvcache"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>纯前端实现 · 所有矩阵运算在浏览器中实时计算 · 小型演示模型</p>
+  </footer>
+
+  <script src="js/matrix.js"></script>
+  <script src="js/model.js"></script>
+  <script src="js/views/architecture.js"></script>
+  <script src="js/views/components.js"></script>
+  <script src="js/views/training.js"></script>
+  <script src="js/views/inference.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
